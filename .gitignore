@@ -1,0 +1,54 @@
+# ── Old project folder (superseded by fed-dcn-synthetic) ───────────────────
+fed-dcn/
+
+# ── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# ── Virtual environments ─────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+
+# ── Jupyter notebooks ────────────────────────────────────────────────────────
+*.ipynb
+.ipynb_checkpoints/
+
+# ── Model weights & training artefacts ──────────────────────────────────────
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+fitted_models/
+pretrained_cache/
+
+# ── Datasets & training data ─────────────────────────────────────────────────
+data/
+datasets/
+*.csv
+*.parquet
+*.h5
+*.hdf5
+*.npy
+*.npz
+
+# ── Weights & Biases ────────────────────────────────────────────────────────
+wandb/
+
+# ── Optuna databases ────────────────────────────────────────────────────────
+*.db
+
+# ── Experiment outputs ───────────────────────────────────────────────────────
+optuna_results.json
+
+# ── IDE / tooling ────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.code-workspace
+.DS_Store
+
+# ── Claude Code ──────────────────────────────────────────────────────────────
+.claude/

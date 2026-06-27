@@ -1,0 +1,23 @@
+[project]
+name = "fed-deep-clustering"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.14"
+dependencies = [
+    "flwr[simulation]>=1.29.0",
+    "flwr-datasets[vision]>=0.6.0",
+    "matplotlib>=3.10.9",
+    "notebook>=7.5.5",
+    "numpy>=2.4.4",
+    "pandas>=3.0.2",
+    "scikit-learn>=1.8.0",
+    "scipy>=1.11.0",
+    "seaborn>=0.13.2",
+    "torch>=2.11.0",
+    "torchvision>=0.26.0",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.2.0",
+]

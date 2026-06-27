@@ -1,0 +1,5 @@
+.venv/
+__pycache__/
+fitted_models/
+pretrained_cache/
+*.pyc

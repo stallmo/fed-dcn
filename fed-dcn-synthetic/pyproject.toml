@@ -1,0 +1,142 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fed-dcn-synthetic"
+version = "0.1.0"
+description = "Federated DCN with synthetic data generation, UMAP pretraining, and latent-space augmentation"
+requires-python = ">=3.14"
+license = {file = "LICENSE"}
+dependencies = [
+    "flwr[simulation]>=1.29.0",
+    "flwr-datasets[vision]>=0.6.0",
+    "numpy>=2.4.4",
+    "optuna>=3.6.0",
+    "scikit-learn>=1.8.0",
+    "scipy>=1.11.0",
+    "torch>=2.11.0",
+    "torchvision>=0.26.0",
+    "ray[default]>=2.55.1",
+    "umap-learn>=0.5.12",
+    "wandb>=0.17.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+exclude = [
+    "fitted_models",
+    "pretrained_cache",
+]
+
+[tool.flwr.app]
+publisher = "fed-dcn-synthetic"
+
+[tool.flwr.app.components]
+serverapp = "fed_dcn_synthetic_app.server_app:app"
+clientapp = "fed_dcn_synthetic_app.client_app:app"
+
+[tool.flwr.app.config]
+# ── Dataset ────────────────────────────────────────────────────────────────
+dataset = "mnist"
+input-dim = 784
+hidden-dims = "[512, 256, 128]"
+bottleneck-dim = 5
+
+# ── Clustering ─────────────────────────────────────────────────────────────
+n-clusters = 10
+
+# ── Phase 1: Local DCN training ────────────────────────────────────────────
+# Each client trains a local DCN before sharing cluster statistics.
+local-pretrain-epochs = 50          # AE-only pretraining epochs (no cluster loss)
+local-training-epochs = 25         # DCN training epochs (reconstruction + cluster loss)
+alpha-geom-local = 0.6441               # geometry loss weight during local DCN training (0 = disabled)
+
+# ── Phase 1: Synthetic dataset ─────────── ──────────────────────────────────
+# After local training, clients share cluster centres, decoder weights,
+# per-cluster std deviations, and within-1-std-radius counts.
+# If synthetic-samples-per-cluster is set, that fixed count is used for every
+# non-empty cluster. If omitted, the communicated within-1-std counts are used
+# directly, so the synthetic dataset mirrors the true (non-IID) distribution.
+synthetic-samples-total = 5000       # proportional budget shared across all clients/clusters
+# synthetic-samples-per-cluster = 500  # legacy: fixed count per cluster (overrides synthetic-samples-total if set)
+dp-noise-sigma = 0.0                 # Gaussian noise std added to shared stats (0 = disabled)
+synthetic-data-path = "synthetic_dataset.pt"
+
+# ── Phase 2: UMAP geometry pretraining ─────────────────────────────────────
+# Phase 2a optimises reconstruction + alpha_geom * MSE(encoder(x), UMAP(x)).
+# UMAP embeddings are precomputed on the synthetic dataset.
+phase2a-epochs = 50                 # epochs for reconstruction + geometry loss
+alpha-geom = 0.6441                    # geometry (UMAP) loss weight in phase 2a
+
+# Phase 2b warm-starts the federation with a few DCN-loss epochs on synthetic data.
+phase2b-epochs = 25                 # warm-start epochs (reconstruction + cluster loss)
+beta-clust-warmstart = 0.062605         # cluster loss weight during warm-start
+alpha-geom-warmstart = 0.6441           # geometry loss weight during warm-start (0 = disabled)
+
+# UMAP hyperparameters
+umap-n-components = 5 # should match bottleneck-dim for geometry loss to align
+umap-n-neighbors = 15
+umap-min-dist = 0.1
+
+# Pretraining cache
+# When true, Phase 1+2 are skipped if a cached checkpoint whose filename matches the current
+# network architecture (dataset, input-dim, hidden-dims, bottleneck-dim, n-clusters) is found
+# in pretraining-cache-dir. If no match exists, Phase 1+2 run and the result is saved
+# (overriding any previous cache for this architecture).
+reuse-pretraining = false
+pretraining-cache-dir = "pretrained_cache"
+
+# ── Phase 3: Federated training ────────────────────────────────────────────
+num-server-rounds = 75
+local-epochs = 5                     # local epochs per client per round
+
+# Loss weights during federation
+lambda-clust-loss = 0.062605             # cluster loss weight (β in the DCN loss)
+alpha-reconstruction-loss = 0.33112      # reconstruction loss weight
+alpha-geom-federated = 0.6441          # geometry loss weight in Phase 3 rounds (uses synthetic UMAP; 0 = disabled)
+augment-federated = true               # set to false to disable synthetic data augmentation during federation (ablation)
+
+# FedProx (0 = FedAvg)
+fedprox-mu = 0.0
+
+# Early stopping: stop if metric did not improve for this many rounds
+early-stopping-rounds = 15
+# Metric to monitor for early stopping: "db_latent" (minimize) or "accuracy" (maximize)
+early-stopping-metric = "accuracy"
+# Fraction of the training set used for per-round evaluation (early stopping / HPO).
+# Set below 1.0 to speed up evaluation (e.g. 0.2 ≈ 12 000 MNIST samples).
+train-eval-fraction = 0.2
+
+# ── Learning rates ─────────────────────────────────────────────────────────
+learning-rate = 0.0072818
+learning-rate-local = 0.0072818       # Phase 1 local client training
+learning-rate-pretrain = 0.0072818     # Phase 2 server-side pretraining
+learning-rate-federated = 0.0072818    # Phase 3 federated rounds
+
+# ── Data partitioning ──────────────────────────────────────────────────────
+batch-size = 256
+dirichlet-alpha = 1000.0     # Non-IID partitioning (lower = more heterogeneous)
+random-seed = 43
+
+
+#######################################################################
+# CONFIGURATION MIGRATION NOTICE:
+#
+# What was previously called "federation config" for SuperLink
+# connections in pyproject.toml has been renamed and moved.
+#
+# These settings are now **SuperLink connection configuration**
+# and are defined in the Flower configuration file.
+#
+# The entries below are commented out intentionally and are kept
+# only as a migration reference.
+#
+# Docs: https://flower.ai/docs/framework/ref-flower-configuration.html
+#######################################################################
+
+# [tool.flwr.federations]
+# default = "local-simulation"
+
+# [tool.flwr.federations.local-simulation]
+# options.num-supernodes = 5
