@@ -15,6 +15,7 @@ env/
 
 # ── Jupyter notebooks ────────────────────────────────────────────────────────
 *.ipynb
+!centralized_baseline/exploration/optuna_hpo_analysis.ipynb
 .ipynb_checkpoints/
 
 # ── Model weights & training artefacts ──────────────────────────────────────
