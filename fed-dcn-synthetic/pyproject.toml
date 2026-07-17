@@ -38,8 +38,8 @@ clientapp = "fed_dcn_synthetic_app.client_app:app"
 
 [tool.flwr.app.config]
 # ── Dataset ────────────────────────────────────────────────────────────────
-dataset = "mnist"
-input-dim = 784
+dataset = "usps"
+input-dim = 256
 hidden-dims = "[512, 256, 128]"
 bottleneck-dim = 5
 
@@ -116,7 +116,7 @@ learning-rate-federated = 0.0072818    # Phase 3 federated rounds
 
 # ── Data partitioning ──────────────────────────────────────────────────────
 batch-size = 256
-dirichlet-alpha = 1000.0     # Non-IID partitioning (lower = more heterogeneous)
+dirichlet-alpha = 1000.0    # Non-IID partitioning (lower = more heterogeneous)
 random-seed = 43
 
 
