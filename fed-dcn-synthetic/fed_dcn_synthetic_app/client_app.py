@@ -163,7 +163,8 @@ def _compute_cluster_stats(
         dists = torch.norm(z_k - centers[k], dim=1)
         std_k = float(dists.std().item()) if dists.shape[0] > 1 else 1.0
         std_devs[k] = max(std_k, 1e-6)
-        counts[k] = float((dists <= std_k).sum().item())
+        # counts[k] = float((dists <= std_k).sum().item()) # used in all cases except 20 clients case on the USPS dataset
+        counts[k] = mask.sum().item() # used in the 20 clients case on the USPS dataset due to the small number of points in each local cluster
     return centers.numpy(), std_devs, counts
 
 

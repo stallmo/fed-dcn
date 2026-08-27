@@ -524,7 +524,7 @@ def main(grid: Grid, context: Context) -> None:
         # generation so that samples_per_cluster fixes the dataset size
         # independently of the total number of clients.
         _rng = np.random.default_rng(seed)
-        _n_synth_clients = min(10, len(node_ids))
+        _n_synth_clients = len(node_ids) #min(10, len(node_ids))
         synth_node_ids = [node_ids[i] for i in _rng.choice(len(node_ids), size=_n_synth_clients, replace=False)]
         print(f"  Sampling {_n_synth_clients} clients for synthetic data: {synth_node_ids}")
 

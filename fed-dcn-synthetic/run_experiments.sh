@@ -5,11 +5,12 @@ set -euo pipefail
 # Experiment configuration — edit these values
 # =============================================================================
 
-# Dataset to use for training and evaluation
-DATASET="mnist"
+# Dataset to use for training and evaluation: "mnist", "fashion-mnist", or "usps"
+# For usps, input-dim is automatically set to 256 by experiment_runner.py.
+DATASET="usps"
 
 # Number of Optuna trials to run
-N_TRIALS=41
+N_TRIALS=50
 
 PRETRAIN_EPOCHS=50
 WARMSTART_EPOCHS=25
@@ -24,17 +25,18 @@ EARLY_STOPPING_METRIC=$OBJECTIVE
 SUPERLINK="local-simulation"
 
 # Number of simulated clients
-NUM_SUPERNODES=5
+NUM_SUPERNODES=20
 
 # Weights & Biases project name
-WANDB_PROJECT="fed-dcn-synthetic-hpo-iid-$DATASET-$OBJECTIVE-balanced-clusters"
+WANDB_PROJECT="fed-dcn-synthetic-hpo-iid-$DATASET-$OBJECTIVE-20-clients"
 
 # Optuna study name (used to resume a previous study when combined with STUDY_STORAGE)
-STUDY_NAME="fed-dcn-synthetic-hpo-iid-$DATASET-$OBJECTIVE-balanced-clusters"
+STUDY_NAME=$WANDB_PROJECT
+#"fed-dcn-synthetic-hpo-iid-$DATASET-$OBJECTIVE-balanced-clusters"
 
 # Optuna storage URL — leave empty to use in-memory storage (results are not persisted)
 # Example for SQLite persistence: "sqlite:///optuna.db"
-STUDY_STORAGE="sqlite:///optuna_iid_balanced_clusters_mnist.db"
+STUDY_STORAGE="sqlite:///optuna_iid_20_clients_$DATASET.db"
 
 # Set to 1 to skip Phase 1+2 if a pretraining cache exists for the current architecture
 REUSE_PRETRAINING=0
@@ -95,6 +97,20 @@ printf "  %-26s %s\n" "seed-from-wandb:"       "${SEED_FROM_WANDB_PROJECT:-<none
 echo ""
 
 cd "$SCRIPT_DIR"
+
+# Pre-download USPS data in the main process so Ray workers find it on disk.
+# (torchvision's download needs an SSL workaround on Python 3.14; the patch lives
+# inside _usps_tensors and only applies during the one-time download.)
+if [[ "$DATASET" == "usps" ]]; then
+    echo "Pre-fetching USPS dataset..."
+    uv run python -c "
+from fed_dcn_synthetic_app.task import _usps_tensors
+_usps_tensors(True)
+_usps_tensors(False)
+print('USPS data ready.')
+"
+    echo ""
+fi
 
 if [[ -n "$SEED_FROM_WANDB_PROJECT" ]]; then
     if [[ -z "$STUDY_STORAGE" ]]; then

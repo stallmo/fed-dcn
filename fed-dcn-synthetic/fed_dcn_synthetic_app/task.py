@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 from torchvision.transforms import Compose, ToTensor, Lambda
@@ -15,15 +16,60 @@ from fed_dcn_synthetic_app.clustering import KMeansClusteringModel
 from fed_dcn_synthetic_app.dcn import DCN
 
 _fds_cache: dict[tuple, FederatedDataset] = {}
+_usps_cache: dict[bool, tuple[torch.Tensor, torch.Tensor]] = {}
 
 
-def _get_transforms(dataset: str) -> Compose:
+def _get_transforms(dataset: str) -> Compose | None:
     if dataset in ("mnist", "fashion-mnist"):
         return Compose([
             ToTensor(),
             Lambda(lambda x: torch.flatten(x)),
         ])
+    if dataset == "usps":
+        return None  # transform applied inline in _usps_tensors
     raise ValueError(f"Unsupported dataset: {dataset!r}.")
+
+
+def _usps_tensors(train: bool) -> tuple[torch.Tensor, torch.Tensor]:
+    """Load USPS via torchvision and return flat float32 tensors in [0, 1]."""
+    if train not in _usps_cache:
+        import ssl
+        import torchvision
+        root = Path.home() / ".cache" / "torchvision"
+        # torchvision downloads from a server whose cert chain lacks a Subject Key
+        # Identifier extension, which Python 3.14 rejects.  Bypass verification only
+        # for this one-time download; cached runs never hit this code path.
+        _orig_ctx = ssl._create_default_https_context
+        ssl._create_default_https_context = ssl._create_unverified_context
+        try:
+            ds = torchvision.datasets.USPS(root=str(root), train=train, download=True)
+        finally:
+            ssl._create_default_https_context = _orig_ctx
+        # ds.data is uint8 [0, 255] — torchvision converts raw libsvm [-1,1] via ((x+1)/2*255)
+        X = torch.tensor(np.array(ds.data), dtype=torch.float32).reshape(-1, 256) / 255.0
+        y = torch.tensor(ds.targets, dtype=torch.long)
+        _usps_cache[train] = (X, y)
+    return _usps_cache[train]
+
+
+def _dirichlet_partition(
+    labels: np.ndarray,
+    num_partitions: int,
+    alpha: float,
+    seed: int,
+) -> list[np.ndarray]:
+    """Partition indices by Dirichlet(alpha) allocation per class."""
+    rng = np.random.default_rng(seed)
+    classes = np.unique(labels)
+    partition_indices: list[list] = [[] for _ in range(num_partitions)]
+    for cls in classes:
+        cls_indices = np.where(labels == cls)[0]
+        rng.shuffle(cls_indices)
+        proportions = rng.dirichlet(np.full(num_partitions, alpha))
+        splits = (np.cumsum(proportions[:-1]) * len(cls_indices)).astype(int)
+        for p, chunk in enumerate(np.split(cls_indices, splits)):
+            partition_indices[p].extend(chunk.tolist())
+    return [np.array(idx) for idx in partition_indices]
 
 
 def _hf_dataset_name(dataset: str) -> str:
@@ -63,6 +109,14 @@ def load_partition(
     batch_size: int,
     seed: int,
 ) -> tuple[DataLoader, DataLoader]:
+    if dataset == "usps":
+        X, y = _usps_tensors(train=True)
+        indices = _dirichlet_partition(y.numpy(), num_partitions, alpha, seed)[partition_id]
+        subset = TensorDataset(X[indices], y[indices])
+        trainloader = DataLoader(subset, batch_size=batch_size, shuffle=True)
+        testloader  = DataLoader(subset, batch_size=batch_size, shuffle=False)
+        return trainloader, testloader
+
     global _fds_cache
     cache_key = (dataset, alpha, num_partitions, "client", seed)
     if cache_key not in _fds_cache:
@@ -76,6 +130,7 @@ def load_partition(
             dataset=_hf_dataset_name(dataset),
             partitioners={"train": partitioner},
         )
+
     fds = _fds_cache[cache_key]
     transforms = _get_transforms(dataset)
     img_key = _image_key(dataset)
@@ -92,6 +147,9 @@ def load_partition(
 
 
 def load_test_dataset(dataset: str, batch_size: int) -> DataLoader:
+    if dataset == "usps":
+        X, y = _usps_tensors(train=False)
+        return DataLoader(TensorDataset(X, y), batch_size=batch_size, shuffle=False)
     from datasets import load_dataset as hf_load
     transforms = _get_transforms(dataset)
     img_key = _image_key(dataset)
@@ -105,6 +163,13 @@ def load_test_dataset(dataset: str, batch_size: int) -> DataLoader:
 
 
 def load_train_dataset(dataset: str, batch_size: int, fraction: float = 1.0, seed: int = 42) -> DataLoader:
+    if dataset == "usps":
+        X, y = _usps_tensors(train=True)
+        if fraction < 1.0:
+            n = max(1, int(len(X) * fraction))
+            idx = np.random.default_rng(seed).choice(len(X), n, replace=False)
+            X, y = X[idx], y[idx]
+        return DataLoader(TensorDataset(X, y), batch_size=batch_size, shuffle=False)
     from datasets import load_dataset as hf_load
     transforms = _get_transforms(dataset)
     img_key = _image_key(dataset)

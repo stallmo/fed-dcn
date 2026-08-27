@@ -97,6 +97,9 @@ def _suggest_params(trial: optuna.Trial) -> dict:
     }
 
 
+_DATASET_INPUT_DIM = {"mnist": 784, "fashion-mnist": 784, "usps": 256}
+
+
 def _params_to_config_overrides(params: dict, early_stopping_metric: str, phase2a_epochs: int, phase2b_epochs: int,
                                 dataset: str) -> dict:
     """Map Optuna params to pyproject.toml config keys.
@@ -129,6 +132,7 @@ def _params_to_config_overrides(params: dict, early_stopping_metric: str, phase2
         "phase2a-epochs": phase2a_epochs,
         "phase2b-epochs": phase2b_epochs,
         "dataset": dataset,
+        "input-dim": _DATASET_INPUT_DIM[dataset],
     }
 
 
