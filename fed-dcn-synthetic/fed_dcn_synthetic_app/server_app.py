@@ -779,9 +779,13 @@ def main(grid: Grid, context: Context) -> None:
     # -----------------------------------------------------------------------
     # Save outputs
     # -----------------------------------------------------------------------
+    latest_flat_ae = {k: v.detach().cpu().clone() for k, v in flat_ae.items()}
+    latest_cluster_centers = cluster_centers.clone()
     print(f"\nSaving outputs to {run_dir} ...")
     torch.save(best_flat_ae, run_dir / "final_ae_weights.pt")
     torch.save(best_cluster_centers, run_dir / "final_cluster_centers.pt")
+    torch.save(latest_flat_ae, run_dir / "latest_ae_weights.pt")
+    torch.save(latest_cluster_centers, run_dir / "latest_cluster_centers.pt")
 
     with open(run_dir / "metrics.json", "w") as f:
         json.dump(metrics_history, f, indent=2)
