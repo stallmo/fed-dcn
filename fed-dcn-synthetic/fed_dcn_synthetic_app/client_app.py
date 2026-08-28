@@ -33,6 +33,7 @@ def _load_partition(context: Context):
         dataset=str(cfg["dataset"]),
         batch_size=int(cfg["batch-size"]),
         seed=int(cfg["random-seed"]),
+        run_config=cfg,
     )
 
 

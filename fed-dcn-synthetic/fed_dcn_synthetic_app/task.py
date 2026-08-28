@@ -14,6 +14,7 @@ from flwr_datasets.partitioner import DirichletPartitioner
 from fed_dcn_synthetic_app.autoencoder import StackedAutoencoderFactory
 from fed_dcn_synthetic_app.clustering import KMeansClusteringModel
 from fed_dcn_synthetic_app.dcn import DCN
+from fed_dcn_synthetic_app.datasets import DATASET_REGISTRY
 
 _fds_cache: dict[tuple, FederatedDataset] = {}
 _usps_cache: dict[bool, tuple[torch.Tensor, torch.Tensor]] = {}
@@ -108,7 +109,18 @@ def load_partition(
     dataset: str,
     batch_size: int,
     seed: int,
+    run_config: dict | None = None,
 ) -> tuple[DataLoader, DataLoader]:
+    if dataset in DATASET_REGISTRY:
+        return DATASET_REGISTRY[dataset].load_partition(
+            partition_id=partition_id,
+            num_partitions=num_partitions,
+            alpha=alpha,
+            dataset=dataset,
+            batch_size=batch_size,
+            seed=seed,
+            run_config=run_config,
+        )
     if dataset == "usps":
         X, y = _usps_tensors(train=True)
         indices = _dirichlet_partition(y.numpy(), num_partitions, alpha, seed)[partition_id]
@@ -146,7 +158,11 @@ def load_partition(
     return trainloader, testloader
 
 
-def load_test_dataset(dataset: str, batch_size: int) -> DataLoader:
+def load_test_dataset(dataset: str, batch_size: int, run_config: dict | None = None) -> DataLoader:
+    if dataset in DATASET_REGISTRY:
+        return DATASET_REGISTRY[dataset].load_test_dataset(
+            dataset=dataset, batch_size=batch_size, run_config=run_config
+        )
     if dataset == "usps":
         X, y = _usps_tensors(train=False)
         return DataLoader(TensorDataset(X, y), batch_size=batch_size, shuffle=False)
@@ -162,7 +178,17 @@ def load_test_dataset(dataset: str, batch_size: int) -> DataLoader:
     return DataLoader(test_split, batch_size=batch_size, shuffle=False, collate_fn=collate)
 
 
-def load_train_dataset(dataset: str, batch_size: int, fraction: float = 1.0, seed: int = 42) -> DataLoader:
+def load_train_dataset(
+    dataset: str,
+    batch_size: int,
+    fraction: float = 1.0,
+    seed: int = 42,
+    run_config: dict | None = None,
+) -> DataLoader:
+    if dataset in DATASET_REGISTRY:
+        return DATASET_REGISTRY[dataset].load_train_dataset(
+            dataset=dataset, batch_size=batch_size, fraction=fraction, seed=seed, run_config=run_config
+        )
     if dataset == "usps":
         X, y = _usps_tensors(train=True)
         if fraction < 1.0:
@@ -192,11 +218,26 @@ def synthetic_dataloader(synthetic_images: torch.Tensor, batch_size: int, shuffl
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
 
 
+def _ae_factory_cls(dataset: str) -> type:
+    """Autoencoder factory for a dataset: the registered one if registered, else the original
+    default (StackedAutoencoderFactory) -- preserves exact existing behavior for any dataset not
+    in DATASET_REGISTRY."""
+    return DATASET_REGISTRY[dataset].ae_factory_cls if dataset in DATASET_REGISTRY else StackedAutoencoderFactory
+
+
+def should_clamp_synthetic(dataset: str) -> bool:
+    """Whether server_app._generate_synthetic_dataset should clamp its output to [0, 1] for this
+    dataset. Defaults to True (the original, unconditional behavior) for any dataset not in
+    DATASET_REGISTRY."""
+    return DATASET_REGISTRY[dataset].clamp_synthetic if dataset in DATASET_REGISTRY else True
+
+
 def build_dcn(run_config: dict, cluster_centers: Optional[torch.Tensor] = None) -> DCN:
     input_dim: int = int(run_config["input-dim"])
     hidden_dims: list = json.loads(str(run_config["hidden-dims"]))
     bottleneck_dim: int = int(run_config["bottleneck-dim"])
     n_clusters: int = int(run_config["n-clusters"])
+    dataset: str = str(run_config.get("dataset", ""))
 
     cluster_model = KMeansClusteringModel(n_clusters=n_clusters)
     if cluster_centers is not None:
@@ -206,7 +247,7 @@ def build_dcn(run_config: dict, cluster_centers: Optional[torch.Tensor] = None) 
         input_dim=input_dim,
         hidden_dims=hidden_dims,
         bottleneck_dim=bottleneck_dim,
-        ae_factory=StackedAutoencoderFactory(),
+        ae_factory=_ae_factory_cls(dataset)(),
         cluster_model=cluster_model,
     )
 
@@ -216,4 +257,5 @@ def build_decoder(run_config: dict) -> torch.nn.Module:
     hidden_dims: list = json.loads(str(run_config["hidden-dims"]))
     input_dim: int = int(run_config["input-dim"])
     bottleneck_dim: int = int(run_config["bottleneck-dim"])
-    return StackedAutoencoderFactory.create_decoder(input_dim, hidden_dims, bottleneck_dim)
+    dataset: str = str(run_config.get("dataset", ""))
+    return _ae_factory_cls(dataset).create_decoder(input_dim, hidden_dims, bottleneck_dim)

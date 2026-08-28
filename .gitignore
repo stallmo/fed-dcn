@@ -29,6 +29,8 @@ pretrained_cache/
 # ── Datasets & training data ─────────────────────────────────────────────────
 data/
 datasets/
+# ...except fed_dcn_synthetic_app's own `datasets` subpackage (dataset-registry code, not data).
+!fed-dcn-synthetic/fed_dcn_synthetic_app/datasets/
 *.csv
 *.parquet
 *.h5

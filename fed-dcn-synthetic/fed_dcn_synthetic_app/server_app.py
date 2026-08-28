@@ -35,6 +35,7 @@ from fed_dcn_synthetic_app.task import (
     build_decoder,
     load_test_dataset,
     load_train_dataset,
+    should_clamp_synthetic,
     synthetic_dataloader,
 )
 
@@ -293,7 +294,8 @@ def _generate_synthetic_dataset(
         })
 
     synthetic = torch.cat(all_images, dim=0)
-    synthetic = synthetic.clamp(0.0, 1.0)
+    if should_clamp_synthetic(str(cfg.get("dataset", ""))):
+        synthetic = synthetic.clamp(0.0, 1.0)
     torch.save(synthetic, save_path)
 
     per_client_totals = [c["total_samples_generated"] for c in all_client_stats]
@@ -478,9 +480,9 @@ def main(grid: Grid, context: Context) -> None:
     run_dir = _make_run_dir(dataset)
     print(f"Run output: {run_dir}")
 
-    central_test_loader = load_test_dataset(dataset=dataset, batch_size=batch_size)
+    central_test_loader = load_test_dataset(dataset=dataset, batch_size=batch_size, run_config=cfg)
     central_train_eval_loader = load_train_dataset(
-        dataset=dataset, batch_size=batch_size, fraction=train_eval_fraction, seed=seed
+        dataset=dataset, batch_size=batch_size, fraction=train_eval_fraction, seed=seed, run_config=cfg
     )
 
     pretrain_cache = _pretrain_cache_path(cfg)
