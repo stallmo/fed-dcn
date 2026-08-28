@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.14"
 dependencies = [
+    "audio-processing",
     "flwr[simulation]>=1.29.0",
     "flwr-datasets[vision]>=0.6.0",
     "matplotlib>=3.10.9",
@@ -20,6 +21,9 @@ dependencies = [
     "torch>=2.11.0",
     "torchvision>=0.26.0",
 ]
+
+[tool.uv.sources]
+audio-processing = { git = "https://github.com/stallmo/sound_anomaly_benchmark_suite.git", branch = "main" }
 
 [dependency-groups]
 dev = [
